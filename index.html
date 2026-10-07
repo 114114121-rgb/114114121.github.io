@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>METRO-OPS // Central Command Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tactical: {
+                            bg: '#080b10',
+                            panel: '#0f1520',
+                            panelHeader: '#141d2c',
+                            border: '#1c293d',
+                            borderBright: '#2a3f5f',
+                            text: '#8a99ad',
+                            textBright: '#d0dfee',
+                            red: '#ff3b30',
+                            blue: '#007aff',
+                            green: '#34c759',
+                            yellow: '#ffcc00',
+                            orange: '#ff9500',
+                            cyan: '#00f2fe',
+                            alert: '#ff0055'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Consolas', 'Monaco', 'Courier New', 'monospace'],
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #080b10;
+            color: #d0dfee;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Custom Tactical Scrollbars */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #080b10; }
+        ::-webkit-scrollbar-thumb { background: #1c293d; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2a3f5f; }
+
+        /* CRT Scanlines Overlay Toggle */
+        .scanlines {
+            position: relative;
+        }
+        .scanlines::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            z-index: 40;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* LED Pulsing Effects */
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .led-pulse { animation: pulse-fast 1.2s infinite; }
+
+        /* Grid Background Texture */
+        .bg-grid-pattern {
+            background-image: linear-gradient(to right, rgba(28, 41, 61, 0.2) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(28, 41, 61, 0.2) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .panel-corner {
+            position: relative;
+        }
+        .panel-corner::after {
+            content: '';
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 8px; height: 8px;
+            border-right: 2px solid #00f2fe;
+            border-bottom: 2px solid #00f2fe;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col bg-tactical-bg text-xs font-sans overflow-hidden antialiased">
+
+    <!-- TOP SYSTEM STATUS HEADER -->
+    <header class="h-12 bg-tactical-panelHeader border-b border-tactical-border px-4 flex items-center justify-between shrink-0 z-50">
+        <!-- Brand & System Status -->
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <div class="w-3 h-3 bg-tactical-cyan rounded-sm animate-pulse"></div>
+                <span class="font-mono font-bold text-sm tracking-wider text-white">METRO-OPS // SYS v4.8</span>
+            </div>
+            <div class="h-4 w-px bg-tactical-border"></div>
+            <div class="flex items-center space-x-2 bg-tactical-bg px-2.5 py-1 rounded border border-tactical-border">
+                <span class="w-2 h-2 rounded-full bg-tactical-green led-pulse" id="global-status-led"></span>
+                <span class="font-mono text-tactical-textBright font-semibold tracking-wide" id="global-status-text">NETWORK OPERATIONAL</span>
+            </div>
+        </div>
+
+        <!-- System KPIs -->
+        <div class="flex items-center space-x-6 font-mono">
+            <div>
+                <span class="text-tactical-text text-[10px] block">ACTIVE FLEET</span>
+                <span class="text-tactical-cyan font-bold text-sm" id="kpi-active-trains">14 / 14</span>
+            </div>
+            <div class="h-6 w-px bg-tactical-border"></div>
+            <div>
+                <span class="text-tactical-text text-[10px] block">ON-TIME RATE</span>
+                <span class="text-tactical-green font-bold text-sm" id="kpi-ontime">98.4%</span>
+            </div>
+            <div class="h-6 w-px bg-tactical-border"></div>
+            <div>
+                <span class="text-tactical-text text-[10px] block">GRID POWER LOAD</span>
+                <span class="text-tactical-yellow font-bold text-sm" id="kpi-power">142.8 MW</span>
+            </div>
+            <div class="h-6 w-px bg-tactical-border"></div>
+            <div>
+                <span class="text-tactical-text text-[10px] block">NETWORK PAX LOAD</span>
+                <span class="text-tactical-textBright font-bold text-sm" id="kpi-load">64%</span>
+            </div>
+        </div>
+
+        <!-- Global Command Controls & Clock -->
+        <div class="flex items-center space-x-3">
+            <!-- Simulation Controls -->
+            <div class="flex items-center bg-tactical-bg p-1 rounded border border-tactical-border space-x-1">
+                <button id="btn-speed-1x" onclick="setSimSpeed(1)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-tactical-border text-white">1X</button>
+                <button id="btn-speed-2x" onclick="setSimSpeed(2)" class="px-2 py-0.5 rounded text-[10px] font-mono text-tactical-text hover:text-white">2X</button>
+                <button id="btn-speed-5x" onclick="setSimSpeed(5)" class="px-2 py-0.5 rounded text-[10px] font-mono text-tactical-text hover:text-white">5X</button>
+            </div>
+
+            <button id="btn-audio" onclick="toggleAudio()" class="p-1.5 rounded bg-tactical-bg border border-tactical-border text-tactical-text hover:text-white" title="Toggle Audio FX">
+                <svg id="icon-audio" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+            </button>
+
+            <button id="btn-scanlines" onclick="toggleScanlines()" class="p-1.5 rounded bg-tactical-bg border border-tactical-border text-tactical-text hover:text-white" title="Toggle Scanlines Effect">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </button>
+
+            <button onclick="triggerEmergencySimulation()" class="px-2.5 py-1 bg-tactical-red/20 border border-tactical-red text-tactical-red hover:bg-tactical-red hover:text-white font-mono font-bold rounded tracking-wider transition-all">
+                EMERGENCY TEST
+            </button>
+
+            <!-- Live Clock -->
+            <div class="font-mono text-right pl-2 border-l border-tactical-border">
+                <div class="text-white font-bold text-xs tracking-wider" id="utc-clock">00:00:00.000</div>
+                <div class="text-[9px] text-tactical-text" id="utc-date">2026-09-24 UTC</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE GRID -->
+    <div class="flex-1 grid grid-cols-12 gap-1 p-1 overflow-hidden relative">
+
+        <!-- LEFT SIDEBAR: FLEET OVERVIEW & TRAIN STATUS -->
+        <section class="col-span-3 bg-tactical-panel border border-tactical-border rounded flex flex-col overflow-hidden panel-corner">
+            <div class="h-8 bg-tactical-panelHeader border-b border-tactical-border px-3 flex items-center justify-between">
+                <span class="font-mono font-bold text-tactical-textBright tracking-wider">NETWORK FLEET STATUS</span>
+                <span class="text-[10px] font-mono text-tactical-cyan" id="lines-online-count">5 LINES ONLINE</span>
+            </div>
+
+            <!-- Lines Accordion List -->
+            <div class="p-2 space-y-1.5 border-b border-tactical-border bg-tactical-bg/50">
+                <!-- Line R -->
+                <div class="bg-tactical-panel border-l-4 border-tactical-red p-1.5 rounded-r flex items-center justify-between text-[11px]">
+                    <div>
+                        <span class="font-bold font-mono text-white">LINE R</span>
+                        <span class="text-tactical-text text-[10px] block">Central Corridor</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <span class="text-tactical-green text-[10px] block">NOMINAL</span>
+                        <span class="text-tactical-text text-[10px]">HW 2.5m</span>
+                    </div>
+                </div>
+                <!-- Line B -->
+                <div class="bg-tactical-panel border-l-4 border-tactical-blue p-1.5 rounded-r flex items-center justify-between text-[11px]">
+                    <div>
+                        <span class="font-bold font-mono text-white">LINE B</span>
+                        <span class="text-tactical-text text-[10px] block">Coastal Belt</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <span class="text-tactical-green text-[10px] block">NOMINAL</span>
+                        <span class="text-tactical-text text-[10px]">HW 3.0m</span>
+                    </div>
+                </div>
+                <!-- Line G -->
+                <div class="bg-tactical-panel border-l-4 border-tactical-green p-1.5 rounded-r flex items-center justify-between text-[11px]">
+                    <div>
+                        <span class="font-bold font-mono text-white">LINE G</span>
+                        <span class="text-tactical-text text-[10px] block">Inner Loop Ring</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <span class="text-tactical-green text-[10px] block">NOMINAL</span>
+                        <span class="text-tactical-text text-[10px]">HW 2.0m</span>
+                    </div>
+                </div>
+                <!-- Line Y -->
+                <div class="bg-tactical-panel border-l-4 border-tactical-yellow p-1.5 rounded-r flex items-center justify-between text-[11px]">
+                    <div>
+                        <span class="font-bold font-mono text-white">LINE Y</span>
+                        <span class="text-tactical-text text-[10px] block">Airport Express</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <span class="text-tactical-green text-[10px] block">NOMINAL</span>
+                        <span class="text-tactical-text text-[10px]">HW 4.0m</span>
+                    </div>
+                </div>
+                <!-- Line O -->
+                <div class="bg-tactical-panel border-l-4 border-tactical-orange p-1.5 rounded-r flex items-center justify-between text-[11px]">
+                    <div>
+                        <span class="font-bold font-mono text-white">LINE O</span>
+                        <span class="text-tactical-text text-[10px] block">Cross-Town Direct</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <span class="text-tactical-green text-[10px] block">NOMINAL</span>
+                        <span class="text-tactical-text text-[10px]">HW 3.5m</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Active Fleet Telemetry Table -->
+            <div class="flex-1 flex flex-col overflow-hidden p-2">
+                <div class="text-[10px] font-mono text-tactical-text mb-1 flex justify-between">
+                    <span>LIVE TRAIN TELEMETRY</span>
+                    <span id="train-table-count">14 ACTIVE</span>
+                </div>
+                <div class="flex-1 overflow-y-auto pr-1">
+                    <table class="w-full text-left border-collapse font-mono text-[10px]">
+                        <thead class="sticky top-0 bg-tactical-panelHeader text-tactical-text border-b border-tactical-border">
+                            <tr>
+                                <th class="p-1">TRN#</th>
+                                <th class="p-1">LINE</th>
+                                <th class="p-1">SPD</th>
+                                <th class="p-1">NEXT STN</th>
+                                <th class="p-1 text-right">LOAD</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fleet-table-body" class="divide-y divide-tactical-border/50 text-tactical-textBright">
+                            <!-- Dynamic Rows Injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER PANEL: LIVE ANIMATED NETWORK MAP & INCIDENT COMMAND -->
+        <section class="col-span-6 flex flex-col gap-1 overflow-hidden">
+            
+            <!-- Map Container -->
+            <div class="flex-1 bg-tactical-panel border border-tactical-border rounded flex flex-col overflow-hidden relative bg-grid-pattern panel-corner">
+                
+                <!-- Map Toolbar / View Mode Layer Toggles -->
+                <div class="h-8 bg-tactical-panelHeader border-b border-tactical-border px-3 flex items-center justify-between z-10 shrink-0">
+                    <div class="flex items-center space-x-1">
+                        <span class="font-mono font-bold text-tactical-textBright tracking-wider mr-2">NETWORK MAP</span>
+                        
+                        <button id="layer-signal" onclick="toggleMapLayer('signal')" class="px-2 py-0.5 rounded text-[10px] font-mono bg-tactical-cyan/20 border border-tactical-cyan text-tactical-cyan">
+                            SIGNALS
+                        </button>
+                        <button id="layer-labels" onclick="toggleMapLayer('labels')" class="px-2 py-0.5 rounded text-[10px] font-mono bg-tactical-cyan/20 border border-tactical-cyan text-tactical-cyan">
+                            LABELS
+                        </button>
+                        <button id="layer-power" onclick="toggleMapLayer('power')" class="px-2 py-0.5 rounded text-[10px] font-mono bg-tactical-bg border border-tactical-border text-tactical-text hover:text-white">
+                            POWER GRID
+                        </button>
+                        <button id="layer-heatmap" onclick="toggleMapLayer('heatmap')" class="px-2 py-0.5 rounded text-[10px] font-mono bg-tactical-bg border border-tactical-border text-tactical-text hover:text-white">
+                            PAX HEATMAP
+                        </button>
+                    </div>
+
+                    <div class="flex items-center space-x-2 font-mono text-[10px]">
+                        <span class="text-tactical-text">CLICK TRAIN/STATION FOR TELEMETRY</span>
+                        <button onclick="resetMapView()" class="text-tactical-text hover:text-white underline">RESET</button>
+                    </div>
+                </div>
+
+                <!-- Main Canvas Area -->
+                <div class="flex-1 relative overflow-hidden" id="map-canvas-container">
+                    <canvas id="map-canvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+                    <!-- Station/Train Telemetry Modal Inspector Popup (Absolute Positioned over Canvas) -->
+                    <div id="inspector-card" class="hidden absolute top-4 right-4 w-64 bg-tactical-panelHeader/95 border border-tactical-cyan rounded p-3 shadow-2xl backdrop-blur-md z-30 font-mono text-[11px]">
+                        <div class="flex justify-between items-center border-b border-tactical-border pb-1 mb-2">
+                            <span class="font-bold text-tactical-cyan" id="inspector-title">TRAIN T-102</span>
+                            <button onclick="closeInspector()" class="text-tactical-text hover:text-white font-bold">×</button>
+                        </div>
+                        <div id="inspector-content" class="space-y-1.5 text-tactical-textBright">
+                            <!-- Dynamic Info Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Panel: Live Dynamic Incident & Alert Command Stream -->
+            <div class="h-44 bg-tactical-panel border border-tactical-border rounded flex flex-col overflow-hidden panel-corner">
+                <div class="h-7 bg-tactical-panelHeader border-b border-tactical-border px-3 flex items-center justify-between shrink-0">
+                    <div class="flex items-center space-x-2 font-mono">
+                        <span class="font-bold text-tactical-textBright tracking-wider">INCIDENT & DISPATCH STREAM</span>
+                        <span class="px-1.5 py-0.2 bg-tactical-red/20 text-tactical-red text-[9px] rounded font-bold" id="active-alert-count">0 CRITICAL ALERTS</span>
+                    </div>
+                    <div class="text-[10px] font-mono text-tactical-text">SYSTEM LOG // AUTO-DISPATCH ACTIVE</div>
+                </div>
+
+                <div class="flex-1 grid grid-cols-12 gap-2 p-2 overflow-hidden">
+                    <!-- Left Log Stream -->
+                    <div class="col-span-8 bg-tactical-bg border border-tactical-border rounded p-2 overflow-y-auto font-mono text-[10px] space-y-1" id="system-log-stream">
+                        <!-- Dynamic log messages injected here -->
+                    </div>
+
+                    <!-- Right Action Dispatch Panel -->
+                    <div class="col-span-4 bg-tactical-bg border border-tactical-border rounded p-2 flex flex-col justify-between font-mono">
+                        <div class="text-[10px] font-bold text-tactical-text border-b border-tactical-border pb-1">COMMAND DISPATCHER</div>
+                        <div id="dispatcher-status" class="text-[10px] text-tactical-textBright my-1">
+                            Network running nominal. No manual override required.
+                        </div>
+                        <div class="space-y-1">
+                            <button id="btn-ack-alert" onclick="acknowledgeActiveAlert()" disabled class="w-full py-1 bg-tactical-border text-tactical-text font-bold rounded text-[10px] transition-all disabled:opacity-40">
+                                ACKNOWLEDGE ALERT
+                            </button>
+                            <button id="btn-resolve-alert" onclick="resolveActiveAlert()" disabled class="w-full py-1 bg-tactical-green/20 border border-tactical-green text-tactical-green font-bold rounded text-[10px] hover:bg-tactical-green hover:text-black transition-all disabled:opacity-40">
+                                RESOLVE INCIDENT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT SIDEBAR: CCTV FEEDS & ANALYTICS TELEMETRY -->
+        <section class="col-span-3 bg-tactical-panel border border-tactical-border rounded flex flex-col overflow-hidden panel-corner">
+            
+            <!-- CCTV Feeds Panel -->
+            <div class="h-1/2 border-b border-tactical-border flex flex-col overflow-hidden">
+                <div class="h-8 bg-tactical-panelHeader border-b border-tactical-border px-3 flex items-center justify-between shrink-0">
+                    <span class="font-mono font-bold text-tactical-textBright tracking-wider">LIVE STATION CCTV</span>
+                    <span class="text-[9px] font-mono text-tactical-red flex items-center">
+                        <span class="w-1.5 h-1.5 rounded-full bg-tactical-red animate-ping mr-1"></span> LIVE 4-CAM
+                    </span>
+                </div>
+
+                <div class="flex-1 grid grid-cols-2 gap-1 p-1 bg-tactical-bg">
+                    <!-- Cam 1 -->
+                    <div class="bg-black border border-tactical-border relative overflow-hidden group">
+                        <canvas id="cctv-1" class="w-full h-full block"></canvas>
+                        <div class="absolute top-1 left-1 bg-black/70 px-1 py-0.5 font-mono text-[8px] text-tactical-cyan rounded">CAM 01 // CENTRAL HUB</div>
+                        <div class="absolute bottom-1 right-1 font-mono text-[8px] text-tactical-text text-white/70" id="cctv-time-1">00:00:00</div>
+                    </div>
+                    <!-- Cam 2 -->
+                    <div class="bg-black border border-tactical-border relative overflow-hidden group">
+                        <canvas id="cctv-2" class="w-full h-full block"></canvas>
+                        <div class="absolute top-1 left-1 bg-black/70 px-1 py-0.5 font-mono text-[8px] text-tactical-cyan rounded">CAM 02 // AIRPORT T1</div>
+                        <div class="absolute bottom-1 right-1 font-mono text-[8px] text-tactical-text text-white/70" id="cctv-time-2">00:00:00</div>
+                    </div>
+                    <!-- Cam 3 -->
+                    <div class="bg-black border border-tactical-border relative overflow-hidden group">
+                        <canvas id="cctv-3" class="w-full h-full block"></canvas>
+                        <div class="absolute top-1 left-1 bg-black/70 px-1 py-0.5 font-mono text-[8px] text-tactical-cyan rounded">CAM 03 // COASTAL WEST</div>
+                        <div class="absolute bottom-1 right-1 font-mono text-[8px] text-tactical-cyan rounded">CAM 03 // BAYFRONT</div>
+                        <div class="absolute bottom-1 right-1 font-mono text-[8px] text-tactical-text text-white/70" id="cctv-time-3">00:00:00</div>
+                    </div>
+                    <!-- Cam 4 -->
+                    <div class="bg-black border border-tactical-border relative overflow-hidden group">
+                        <canvas id="cctv-4" class="w-full h-full block"></canvas>
+                        <div class="absolute top-1 left-1 bg-black/70 px-1 py-0.5 font-mono text-[8px] text-tactical-cyan rounded">CAM 04 // NORTH LOOP</div>
+                        <div class="absolute bottom-1 right-1 font-mono text-[8px] text-tactical-text text-white/70" id="cctv-time-4">00:00:00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telemetry Sparkline Analytics Panel -->
+            <div class="h-1/2 flex flex-col overflow-hidden p-2 space-y-2">
+                <div class="text-[10px] font-mono text-tactical-textBright font-bold tracking-wider border-b border-tactical-border pb-1 flex justify-between">
+                    <span>TELEMETRY ANALYTICS</span>
+                    <span class="text-tactical-cyan">REAL-TIME</span>
+                </div>
+
+                <div class="flex-1 flex flex-col space-y-1.5">
+                    <!-- Graph 1: Power -->
+                    <div class="flex-1 bg-tactical-bg border border-tactical-border rounded p-1.5 flex flex-col">
+                        <div class="flex justify-between font-mono text-[9px] text-tactical-text mb-1">
+                            <span>GRID POWER CONSUMPTION</span>
+                            <span class="text-tactical-yellow font-bold" id="graph-power-val">142.8 MW</span>
+                        </div>
+                        <div class="flex-1 relative">
+                            <canvas id="graph-power" class="w-full h-full block"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Graph 2: Signal Latency -->
+                    <div class="flex-1 bg-tactical-bg border border-tactical-border rounded p-1.5 flex flex-col">
+                        <div class="flex justify-between font-mono text-[9px] text-tactical-text mb-1">
+                            <span>SIGNAL LATENCY (CBTC)</span>
+                            <span class="text-tactical-green font-bold" id="graph-latency-val">4.2 ms</span>
+                        </div>
+                        <div class="flex-1 relative">
+                            <canvas id="graph-latency" class="w-full h-full block"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Graph 3: Track Vibration -->
+                    <div class="flex-1 bg-tactical-bg border border-tactical-border rounded p-1.5 flex flex-col">
+                        <div class="flex justify-between font-mono text-[9px] text-tactical-text mb-1">
+                            <span>TRACK VIBRATION INDEX</span>
+                            <span class="text-tactical-cyan font-bold" id="graph-vib-val">0.12 G</span>
+                        </div>
+                        <div class="flex-1 relative">
+                            <canvas id="graph-vibration" class="w-full h-full block"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Environmental Metrics Summary -->
+                <div class="grid grid-cols-3 gap-1 font-mono text-[9px] pt-1 border-t border-tactical-border text-center">
+                    <div class="bg-tactical-bg border border-tactical-border p-1 rounded">
+                        <span class="text-tactical-text block text-[8px]">TUNNEL TEMP</span>
+                        <span class="text-white font-bold">22.4°C</span>
+                    </div>
+                    <div class="bg-tactical-bg border border-tactical-border p-1 rounded">
+                        <span class="text-tactical-text block text-[8px]">VENT FANS</span>
+                        <span class="text-tactical-green font-bold">ACTIVE</span>
+                    </div>
+                    <div class="bg-tactical-bg border border-tactical-border p-1 rounded">
+                        <span class="text-tactical-text block text-[8px]">TRACK VOLT</span>
+                        <span class="text-tactical-yellow font-bold">752V DC</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- JAVASCRIPT ENGINE & LOGIC -->
+    <script>
+        // ==========================================
+        // 1. WEB AUDIO SYNTHESIZER
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playBeep(freq = 800, duration = 0.05, type = 'sine') {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+
+            playAlarm() {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(880, this.ctx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.3);
+                } catch (e) {}
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        function toggleAudio() {
+            audio.init();
+            audio.enabled = !audio.enabled;
+            const btn = document.getElementById('btn-audio');
+            btn.classList.toggle('text-tactical-cyan', audio.enabled);
+            btn.classList.toggle('text-tactical-text', !audio.enabled);
+            if(audio.enabled) audio.playBeep(1000, 0.1);
+        }
+
+        function toggleScanlines() {
+            document.body.classList.toggle('scanlines');
+            audio.playBeep(600, 0.05);
+        }
+
+        // ==========================================
+        // 2. NETWORK DATA & STATIONS
+        // ==========================================
+        const STATIONS = {
+            // Line R (Red - North South Central)
+            'R1': { id: 'R1', name: 'North Terminal', x: 500, y: 60 },
+            'R2': { id: 'R2', name: 'Highland Park', x: 500, y: 150 },
+            'R3': { id: 'R3', name: 'North Loop Interchange', x: 500, y: 220, isHub: true },
+            'R4': { id: 'R4', name: 'Central Command Hub', x: 500, y: 350, isHub: true },
+            'R5': { id: 'R5', name: 'Financial District', x: 500, y: 460, isHub: true },
+            'R6': { id: 'R6', name: 'South Bay Terminal', x: 500, y: 570 },
+
+            // Line B (Blue - Coastal Belt)
+            'B1': { id: 'B1', name: 'West Harbor', x: 120, y: 530 },
+            'B2': { id: 'B2', name: 'Port Authority', x: 260, y: 530 },
+            'B3': { id: 'B3', name: 'Bayfront West', x: 380, y: 530 },
+            'B4': { id: 'B4', name: 'Financial District', x: 500, y: 460, isHub: true }, // R5
+            'B5': { id: 'B5', name: 'Marina Square', x: 650, y: 460 },
+            'B6': { id: 'B6', name: 'Tech Park East', x: 800, y: 510 },
+            'B7': { id: 'B7', name: 'Eastern Coast Terminus', x: 920, y: 570 },
+
+            // Line G (Green - Loop Line)
+            'G1': { id: 'G1', name: 'West Ring Park', x: 300, y: 220 },
+            'G2': { id: 'G2', name: 'North Loop Interchange', x: 500, y: 220, isHub: true }, // R3
+            'G3': { id: 'G3', name: 'University City', x: 700, y: 220 },
+            'G4': { id: 'G4', name: 'East Gateway', x: 750, y: 350, isHub: true },
+            'G5': { id: 'G5', name: 'South East Junction', x: 700, y: 480 },
+            'G6': { id: 'G6', name: 'Civic Center', x: 500, y: 570, isHub: true }, // R6
+            'G7': { id: 'G7', name: 'Old Town Square', x: 300, y: 480 },
+            'G8': { id: 'G8', name: 'Grand Boulevard', x: 250, y: 350, isHub: true },
+
+            // Line Y (Yellow - Airport Express)
+            'Y1': { id: 'Y1', name: 'Airport Terminal 1', x: 100, y: 100 },
+            'Y2': { id: 'Y2', name: 'Airport Terminal 2', x: 180, y: 140 },
+            'Y3': { id: 'Y3', name: 'West Ring Park', x: 300, y: 220, isHub: true }, // G1
+            'Y4': { id: 'Y4', name: 'Central Command Hub', x: 500, y: 350, isHub: true }, // R4
+            'Y5': { id: 'Y5', name: 'East Gateway', x: 750, y: 350, isHub: true }, // G4
+            'Y6': { id: 'Y6', name: 'Expo Center East', x: 900, y: 420 },
+
+            // Line O (Orange - Cross-Town Direct)
+            'O1': { id: 'O1', name: 'Industrial Zone West', x: 140, y: 350 },
+            'O2': { id: 'O2', name: 'Grand Boulevard', x: 250, y: 350, isHub: true }, // G8
+            'O3': { id: 'O3', name: 'Central Command Hub', x: 500, y: 350, isHub: true }, // R4/Y4
+            'O4': { id: 'O4', name: 'Midtown East', x: 650, y: 350 },
+            'O5': { id: 'O5', name: 'East Gateway', x: 750, y: 350, isHub: true }, // G4/Y5
+            'O6': { id: 'O6', name: 'Freight Logistics Hub', x: 880, y: 350 }
+        };
+
+        const LINES = {
+            'R': { id: 'R', name: 'Line 1 - Central', color: '#ff3b30', stations: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'] },
+            'B': { id: 'B', name: 'Line 2 - Coastal Belt', color: '#007aff', stations: ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7'] },
+            'G': { id: 'G', name: 'Line 3 - Loop Ring', color: '#34c759', stations: ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8'], isLoop: true },
+            'Y': { id: 'Y', name: 'Line 4 - Airport Express', color: '#ffcc00', stations: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'] },
+            'O': { id: 'O', name: 'Line 5 - Cross-Town', color: '#ff9500', stations: ['O1', 'O2', 'O3', 'O4', 'O5', 'O6'] }
+        };
+
+        // ==========================================
+        // 3. TRAIN FLEET INITIALIZATION & PHYSICS
+        // ==========================================
+        let trains = [];
+        let simSpeed = 1;
+        let activeIncident = null;
+
+        function createFleet() {
+            trains = [
+                // Red Line
+                { id: 'TRN-R101', line: 'R', segIndex: 0, progress: 0.1, dir: 1, speed: 48, maxSpeed: 70, status: 'MOVING', dwell: 0, cap: 68, driver: 'A. Vance', battery: 98 },
+                { id: 'TRN-R102', line: 'R', segIndex: 3, progress: 0.8, dir: -1, speed: 52, maxSpeed: 70, status: 'MOVING', dwell: 0, cap: 82, driver: 'M. Chen', battery: 94 },
+                { id: 'TRN-R103', line: 'R', segIndex: 4, progress: 0.4, dir: 1, speed: 0, maxSpeed: 70, status: 'DWELLING', dwell: 12, cap: 45, driver: 'K. Patel', battery: 100 },
+
+                // Blue Line
+                { id: 'TRN-B201', line: 'B', segIndex: 1, progress: 0.6, dir: 1, speed: 60, maxSpeed: 80, status: 'MOVING', dwell: 0, cap: 74, driver: 'S. Ramos', battery: 91 },
+                { id: 'TRN-B202', line: 'B', segIndex: 5, progress: 0.2, dir: -1, speed: 58, maxSpeed: 80, status: 'MOVING', dwell: 0, cap: 88, driver: 'T. Becker', battery: 89 },
+
+                // Green Line (Loop)
+                { id: 'TRN-G301', line: 'G', segIndex: 0, progress: 0.3, dir: 1, speed: 42, maxSpeed: 65, status: 'MOVING', dwell: 0, cap: 52, driver: 'L. Zhang', battery: 96 },
+                { id: 'TRN-G302', line: 'G', segIndex: 3, progress: 0.7, dir: 1, speed: 45, maxSpeed: 65, status: 'MOVING', dwell: 0, cap: 61, driver: 'D. Ross', battery: 92 },
+                { id: 'TRN-G303', line: 'G', segIndex: 6, progress: 0.9, dir: 1, speed: 0, maxSpeed: 65, status: 'DWELLING', dwell: 8, cap: 79, driver: 'E. Wright', battery: 95 },
+
+                // Yellow Line (High Speed)
+                { id: 'TRN-Y401', line: 'Y', segIndex: 0, progress: 0.5, dir: 1, speed: 92, maxSpeed: 110, status: 'MOVING', dwell: 0, cap: 34, driver: 'H. Tanaka', battery: 99 },
+                { id: 'TRN-Y402', line: 'Y', segIndex: 4, progress: 0.1, dir: -1, speed: 88, maxSpeed: 110, status: 'MOVING', dwell: 0, cap: 58, driver: 'C. Dubois', battery: 93 },
+
+                // Orange Line
+                { id: 'TRN-O501', line: 'O', segIndex: 1, progress: 0.4, dir: 1, speed: 50, maxSpeed: 75, status: 'MOVING', dwell: 0, cap: 63, driver: 'J. Kowalski', battery: 97 },
+                { id: 'TRN-O502', line: 'O', segIndex: 3, progress: 0.8, dir: -1, speed: 54, maxSpeed: 75, status: 'MOVING', dwell: 0, cap: 71, driver: 'N. Silva', battery: 90 },
+                { id: 'TRN-O503', line: 'O', segIndex: 4, progress: 0.2, dir: 1, speed: 48, maxSpeed: 75, status: 'MOVING', dwell: 0, cap: 50, driver: 'O. Lindqvist', battery: 88 }
+            ];
+        }
+
+        // ==========================================
+        // 4. MAP CANVAS RENDERER & INTERACTION
+        // ==========================================
+        const mapCanvas = document.getElementById('map-canvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        let mapLayers = { signal: true, labels: true, power: false, heatmap: false };
+        let selectedEntity = null; // { type: 'TRAIN'|'STATION', object: ... }
+
+        function resizeMapCanvas() {
+            const rect = mapCanvas.parentElement.getBoundingClientRect();
+            mapCanvas.width = rect.width * window.devicePixelRatio;
+            mapCanvas.height = rect.height * window.devicePixelRatio;
+            mapCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        function getStationPos(stnId) {
+            const stn = STATIONS[stnId];
+            if (!stn) return { x: 0, y: 0 };
+            // Scale logical coords (1000x600) to actual canvas size
+            const container = mapCanvas.parentElement.getBoundingClientRect();
+            return {
+                x: (stn.x / 1000) * container.width,
+                y: (stn.y / 650) * container.height
+            };
+        }
+
+        function getTrainPos(train) {
+            const line = LINES[train.line];
+            const stnList = line.stations;
+            const idxA = train.segIndex;
+            let idxB = train.segIndex + train.dir;
+
+            if (line.isLoop) {
+                if (idxB >= stnList.length) idxB = 0;
+                if (idxB < 0) idxB = stnList.length - 1;
+            }
+
+            const posA = getStationPos(stnList[idxA]);
+            const posB = getStationPos(stnList[idxB]);
+
+            return {
+                x: posA.x + (posB.x - posA.x) * train.progress,
+                y: posA.y + (posB.y - posA.y) * train.progress
+            };
+        }
+
+        function drawMap() {
+            const rect = mapCanvas.parentElement.getBoundingClientRect();
+            mapCtx.clearRect(0, 0, rect.width, rect.height);
+
+            // 1. Draw Power Grid Vector Layer if Enabled
+            if (mapLayers.power) {
+                mapCtx.strokeStyle = 'rgba(255, 204, 0, 0.12)';
+                mapCtx.lineWidth = 1;
+                for (let x = 0; x < rect.width; x += 40) {
+                    mapCtx.beginPath();
+                    mapCtx.moveTo(x, 0); mapCtx.lineTo(x, rect.height);
+                    mapCtx.stroke();
+                }
+            }
+
+            // 2. Draw Track Lines
+            Object.keys(LINES).forEach(lineKey => {
+                const line = LINES[lineKey];
+                mapCtx.strokeStyle = line.color;
+                mapCtx.lineWidth = 4;
+                mapCtx.lineCap = 'round';
+                mapCtx.lineJoin = 'round';
+
+                mapCtx.beginPath();
+                line.stations.forEach((stnId, idx) => {
+                    const pos = getStationPos(stnId);
+                    if (idx === 0) mapCtx.moveTo(pos.x, pos.y);
+                    else mapCtx.lineTo(pos.x, pos.y);
+                });
+                if (line.isLoop) {
+                    const firstPos = getStationPos(line.stations[0]);
+                    mapCtx.lineTo(firstPos.x, firstPos.y);
+                }
+                mapCtx.stroke();
+            });
+
+            // 3. Draw Passenger Heatmap Overlay if Enabled
+            if (mapLayers.heatmap) {
+                Object.keys(STATIONS).forEach(stnId => {
+                    const pos = getStationPos(stnId);
+                    const grad = mapCtx.createRadialGradient(pos.x, pos.y, 2, pos.x, pos.y, 35);
+                    grad.addColorStop(0, 'rgba(255, 0, 85, 0.4)');
+                    grad.addColorStop(1, 'transparent');
+                    mapCtx.fillStyle = grad;
+                    mapCtx.beginPath();
+                    mapCtx.arc(pos.x, pos.y, 35, 0, Math.PI * 2);
+                    mapCtx.fill();
+                });
+            }
+
+            // 4. Draw Stations
+            Object.keys(STATIONS).forEach(stnId => {
+                const stn = STATIONS[stnId];
+                const pos = getStationPos(stnId);
+
+                // Outer Ring
+                mapCtx.fillStyle = '#0f1520';
+                mapCtx.strokeStyle = stn.isHub ? '#00f2fe' : '#8a99ad';
+                mapCtx.lineWidth = stn.isHub ? 2 : 1.5;
+
+                mapCtx.beginPath();
+                mapCtx.arc(pos.x, pos.y, stn.isHub ? 7 : 4.5, 0, Math.PI * 2);
+                mapCtx.fill();
+                mapCtx.stroke();
+
+                // Center Dot
+                mapCtx.fillStyle = stn.isHub ? '#00f2fe' : '#ffffff';
+                mapCtx.beginPath();
+                mapCtx.arc(pos.x, pos.y, stn.isHub ? 3 : 1.5, 0, Math.PI * 2);
+                mapCtx.fill();
+
+                // Signal Node Light
+                if (mapLayers.signal) {
+                    mapCtx.fillStyle = '#34c759';
+                    mapCtx.beginPath();
+                    mapCtx.arc(pos.x + 8, pos.y - 8, 2, 0, Math.PI * 2);
+                    mapCtx.fill();
+                }
+
+                // Station Labels
+                if (mapLayers.labels) {
+                    mapCtx.fillStyle = stn.isHub ? '#ffffff' : '#8a99ad';
+                    mapCtx.font = `${stn.isHub ? 'bold 10px' : '9px'} Consolas, monospace`;
+                    mapCtx.fillText(stn.name, pos.x + 10, pos.y + 3);
+                }
+            });
+
+            // 5. Draw Active Trains
+            trains.forEach(trn => {
+                const pos = getTrainPos(trn);
+                const line = LINES[trn.line];
+
+                // Train Icon / Marker
+                mapCtx.fillStyle = trn.status === 'DWELLING' ? '#ffcc00' : line.color;
+                mapCtx.strokeStyle = '#ffffff';
+                mapCtx.lineWidth = 1.5;
+
+                mapCtx.beginPath();
+                mapCtx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                mapCtx.fill();
+                mapCtx.stroke();
+
+                // Direction Vector Line
+                if (trn.status === 'MOVING') {
+                    mapCtx.strokeStyle = line.color;
+                    mapCtx.lineWidth = 2;
+                    mapCtx.beginPath();
+                    mapCtx.moveTo(pos.x, pos.y);
+                    mapCtx.lineTo(pos.x + (trn.dir * 10), pos.y);
+                    mapCtx.stroke();
+                }
+
+                // Train ID Label Tag
+                if (mapLayers.labels) {
+                    mapCtx.fillStyle = '#ffffff';
+                    mapCtx.font = 'bold 9px Consolas, monospace';
+                    mapCtx.fillText(trn.id, pos.x - 18, pos.y - 9);
+                }
+            });
+
+            // 6. Draw Selected Highlight Marker
+            if (selectedEntity) {
+                let p = null;
+                if (selectedEntity.type === 'TRAIN') p = getTrainPos(selectedEntity.object);
+                else if (selectedEntity.type === 'STATION') p = getStationPos(selectedEntity.object.id);
+
+                if (p) {
+                    mapCtx.strokeStyle = '#00f2fe';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.setLineDash([4, 4]);
+                    mapCtx.beginPath();
+                    mapCtx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+                    mapCtx.stroke();
+                    mapCtx.setLineDash([]);
+                }
+            }
+        }
+
+        function updateSimulation() {
+            trains.forEach(trn => {
+                const line = LINES[trn.line];
+                const stnList = line.stations;
+
+                if (trn.status === 'DWELLING') {
+                    trn.dwell -= 0.1 * simSpeed;
+                    if (trn.dwell <= 0) {
+                        trn.status = 'MOVING';
+                        trn.speed = 10;
+                    }
+                } else if (trn.status === 'MOVING') {
+                    // Accelerate to max speed
+                    if (trn.speed < trn.maxSpeed) trn.speed += 0.5 * simSpeed;
+
+                    // Progress along segment
+                    const step = (trn.speed / 3600) * 0.05 * simSpeed;
+                    trn.progress += step;
+
+                    if (trn.progress >= 1.0) {
+                        // Reached Next Station
+                        trn.progress = 0;
+                        trn.segIndex += trn.dir;
+
+                        // Check Reversing or Loop bounds
+                        if (line.isLoop) {
+                            if (trn.segIndex >= stnList.length) trn.segIndex = 0;
+                            if (trn.segIndex < 0) trn.segIndex = stnList.length - 1;
+                        } else {
+                            if (trn.segIndex >= stnList.length - 1 || trn.segIndex <= 0) {
+                                trn.dir *= -1; // Reverse Direction
+                            }
+                        }
+
+                        // Trigger Dwell Stop
+                        trn.status = 'DWELLING';
+                        trn.speed = 0;
+                        trn.dwell = 6 + Math.floor(Math.random() * 8);
+
+                        // Randomly fluctuate capacity
+                        trn.cap = Math.min(100, Math.max(20, trn.cap + Math.floor(Math.random() * 11) - 5));
+                    }
+                }
+            });
+        }
+
+        // Canvas Map Click Selector
+        mapCanvas.addEventListener('click', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            let found = null;
+
+            // Check trains click
+            trains.forEach(trn => {
+                const p = getTrainPos(trn);
+                const dist = Math.hypot(p.x - clickX, p.y - clickY);
+                if (dist < 12) found = { type: 'TRAIN', object: trn };
+            });
+
+            // Check stations click
+            if (!found) {
+                Object.keys(STATIONS).forEach(stnId => {
+                    const stn = STATIONS[stnId];
+                    const p = getStationPos(stnId);
+                    const dist = Math.hypot(p.x - clickX, p.y - clickY);
+                    if (dist < 12) found = { type: 'STATION', object: stn };
+                });
+            }
+
+            selectedEntity = found;
+            audio.playBeep(900, 0.04);
+            updateInspector();
+        });
+
+        function updateInspector() {
+            const card = document.getElementById('inspector-card');
+            const title = document.getElementById('inspector-title');
+            const content = document.getElementById('inspector-content');
+
+            if (!selectedEntity) {
+                card.classList.add('hidden');
+                return;
+            }
+
+            card.classList.remove('hidden');
+
+            if (selectedEntity.type === 'TRAIN') {
+                const trn = selectedEntity.object;
+                const line = LINES[trn.line];
+                title.innerText = `TRAIN // ${trn.id}`;
+                content.innerHTML = `
+                    <div class="flex justify-between"><span>LINE:</span><span class="font-bold" style="color:${line.color}">${line.name}</span></div>
+                    <div class="flex justify-between"><span>STATUS:</span><span class="text-tactical-green font-bold">${trn.status}</span></div>
+                    <div class="flex justify-between"><span>VELOCITY:</span><span>${Math.round(trn.speed)} km/h</span></div>
+                    <div class="flex justify-between"><span>DRIVER:</span><span>${trn.driver}</span></div>
+                    <div class="flex justify-between"><span>PAX LOAD:</span><span>${trn.cap}%</span></div>
+                    <div class="flex justify-between"><span>BATTERY/AUX:</span><span>${trn.battery}% DC</span></div>
+                    <div class="w-full bg-tactical-bg h-1.5 rounded overflow-hidden mt-1">
+                        <div class="bg-tactical-cyan h-full" style="width: ${trn.cap}%"></div>
+                    </div>
+                `;
+            } else if (selectedEntity.type === 'STATION') {
+                const stn = selectedEntity.object;
+                title.innerText = `STATION // ${stn.id}`;
+                content.innerHTML = `
+                    <div class="flex justify-between"><span>NAME:</span><span class="font-bold text-white">${stn.name}</span></div>
+                    <div class="flex justify-between"><span>TYPE:</span><span>${stn.isHub ? 'INTERCHANGE HUB' : 'STANDARD NODE'}</span></div>
+                    <div class="flex justify-between"><span>PLATFORM AIR:</span><span>21.8 °C</span></div>
+                    <div class="flex justify-between"><span>CROWD DENSITY:</span><span class="text-tactical-yellow">MODERATE (58%)</span></div>
+                    <div class="flex justify-between"><span>GATE FLOW:</span><span>342 pax/min</span></div>
+                `;
+            }
+        }
+
+        function closeInspector() {
+            selectedEntity = null;
+            document.getElementById('inspector-card').classList.add('hidden');
+        }
+
+        function toggleMapLayer(layerKey) {
+            mapLayers[layerKey] = !mapLayers[layerKey];
+            const btn = document.getElementById(`layer-${layerKey}`);
+            btn.classList.toggle('bg-tactical-cyan/20', mapLayers[layerKey]);
+            btn.classList.toggle('border-tactical-cyan', mapLayers[layerKey]);
+            btn.classList.toggle('text-tactical-cyan', mapLayers[layerKey]);
+            btn.classList.toggle('bg-tactical-bg', !mapLayers[layerKey]);
+            btn.classList.toggle('border-tactical-border', !mapLayers[layerKey]);
+            btn.classList.toggle('text-tactical-text', !mapLayers[layerKey]);
+            audio.playBeep(750, 0.03);
+        }
+
+        function resetMapView() {
+            selectedEntity = null;
+            closeInspector();
+            audio.playBeep(500, 0.05);
+        }
+
+        // ==========================================
+        // 5. CCTV CANVASES & ANALYTICS SPARKLINES
+        // ==========================================
+        function initCCTVCanvases() {
+            const camIds = ['cctv-1', 'cctv-2', 'cctv-3', 'cctv-4'];
+            camIds.forEach((id, idx) => {
+                const cvs = document.getElementById(id);
+                const ctx = cvs.getContext('2d');
+                cvs.width = 160; cvs.height = 100;
+
+                function renderCam() {
+                    ctx.fillStyle = '#05080c';
+                    ctx.fillRect(0, 0, 160, 100);
+
+                    // Platform grid lines
+                    ctx.strokeStyle = '#101722';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(10, 80); ctx.lineTo(150, 80);
+                    ctx.moveTo(10, 20); ctx.lineTo(150, 20);
+                    ctx.stroke();
+
+                    // Animated stick people crowds
+                    const time = Date.now() * 0.002 + idx;
+                    ctx.fillStyle = 'rgba(0, 242, 254, 0.4)';
+                    for (let i = 0; i < 8; i++) {
+                        const px = 20 + (i * 16) + Math.sin(time + i) * 4;
+                        const py = 45 + Math.cos(time * 0.5 + i) * 8;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Passing train shadow silhouette
+                    const trainX = ((Date.now() * (0.05 + idx * 0.02)) % 240) - 40;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.fillRect(trainX, 15, 60, 10);
+
+                    // Noise / scanline
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+                    ctx.fillRect(0, (Date.now() * 0.1) % 100, 160, 2);
+
+                    requestAnimationFrame(renderCam);
+                }
+                renderCam();
+            });
+        }
+
+        // Analytics Sparklines
+        class SparklineGraph {
+            constructor(canvasId, lineColor) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.color = lineColor;
+                this.data = new Array(30).fill(50);
+                this.resize();
+            }
+
+            resize() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            push(val) {
+                this.data.shift();
+                this.data.push(val);
+                this.render();
+            }
+
+            render() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                this.ctx.clearRect(0, 0, w, h);
+
+                this.ctx.strokeStyle = this.color;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+
+                const step = w / (this.data.length - 1);
+                this.data.forEach((val, i) => {
+                    const x = i * step;
+                    const y = h - (val / 100) * h;
+                    if (i === 0) this.ctx.moveTo(x, y);
+                    else this.ctx.lineTo(x, y);
+                });
+                this.ctx.stroke();
+            }
+        }
+
+        let graphPower, graphLatency, graphVibration;
+
+        // ==========================================
+        // 6. UI UPDATER & INCIDENT LOG STREAM
+        // ==========================================
+        function updateFleetTable() {
+            const tbody = document.getElementById('fleet-table-body');
+            tbody.innerHTML = '';
+
+            trains.forEach(trn => {
+                const line = LINES[trn.line];
+                const stnList = line.stations;
+                const nextStnId = stnList[trn.segIndex];
+                const nextStn = STATIONS[nextStnId] ? STATIONS[nextStnId].name : '---';
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-tactical-panelHeader cursor-pointer transition-colors';
+                tr.onclick = () => {
+                    selectedEntity = { type: 'TRAIN', object: trn };
+                    updateInspector();
+                    audio.playBeep(850, 0.03);
+                };
+
+                tr.innerHTML = `
+                    <td class="p-1 font-bold text-white">${trn.id}</td>
+                    <td class="p-1"><span class="px-1 rounded text-[8px] text-black font-bold" style="background:${line.color}">${trn.line}</span></td>
+                    <td class="p-1">${Math.round(trn.speed)} km/h</td>
+                    <td class="p-1 truncate max-w-[80px]">${nextStn}</td>
+                    <td class="p-1 text-right font-bold ${trn.cap > 80 ? 'text-tactical-red' : 'text-tactical-cyan'}">${trn.cap}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function appendLog(msg, type = 'INFO') {
+            const stream = document.getElementById('system-log-stream');
+            const entry = document.createElement('div');
+            const now = new Date().toISOString().substr(11, 8);
+
+            let typeStyle = 'text-tactical-text';
+            if (type === 'WARN') typeStyle = 'text-tactical-yellow font-bold';
+            if (type === 'CRIT') typeStyle = 'text-tactical-red font-bold';
+            if (type === 'SYS') typeStyle = 'text-tactical-cyan';
+
+            entry.className = `flex space-x-2 ${typeStyle}`;
+            entry.innerHTML = `
+                <span class="text-tactical-text opacity-60">[${now}]</span>
+                <span class="w-10 font-bold">${type}</span>
+                <span class="flex-1">${msg}</span>
+            `;
+
+            stream.appendChild(entry);
+            stream.scrollTop = stream.scrollHeight;
+        }
+
+        // Emergency and Dispatcher Engine
+        function triggerEmergencySimulation() {
+            activeIncident = {
+                id: 'INC-' + Math.floor(1000 + Math.random() * 9000),
+                type: 'DOOR OBSTRUCTION HOLD',
+                location: 'CENTRAL COMMAND HUB (PLATFORM 2)',
+                severity: 'CRITICAL',
+                acknowledged: false
+            };
+
+            document.getElementById('global-status-led').className = 'w-2 h-2 rounded-full bg-tactical-red led-pulse';
+            document.getElementById('global-status-text').innerText = 'NETWORK ALERT // OVERRIDE ACTIVE';
+            document.getElementById('active-alert-count').innerText = '1 CRITICAL ALERT';
+
+            document.getElementById('dispatcher-status').innerHTML = `
+                <span class="text-tactical-red font-bold block">⚠️ ${activeIncident.type}</span>
+                <span class="text-[9px] text-tactical-text block">${activeIncident.location}</span>
+            `;
+
+            document.getElementById('btn-ack-alert').disabled = false;
+            document.getElementById('btn-ack-alert').classList.add('bg-tactical-yellow', 'text-black');
+
+            appendLog(`EMERGENCY ALERT GENERATED: ${activeIncident.type} at ${activeIncident.location}`, 'CRIT');
+            audio.playAlarm();
+        }
+
+        function acknowledgeActiveAlert() {
+            if (!activeIncident) return;
+            activeIncident.acknowledged = true;
+            document.getElementById('btn-ack-alert').disabled = true;
+            document.getElementById('btn-ack-alert').classList.remove('bg-tactical-yellow', 'text-black');
+            document.getElementById('btn-resolve-alert').disabled = false;
+
+            appendLog(`Incident ${activeIncident.id} ACKNOWLEDGED by Central Dispatcher`, 'WARN');
+            audio.playBeep(1200, 0.08);
+        }
+
+        function resolveActiveAlert() {
+            if (!activeIncident) return;
+            appendLog(`Incident ${activeIncident.id} RESOLVED. System returning to nominal ops.`, 'SYS');
+
+            activeIncident = null;
+            document.getElementById('global-status-led').className = 'w-2 h-2 rounded-full bg-tactical-green led-pulse';
+            document.getElementById('global-status-text').innerText = 'NETWORK OPERATIONAL';
+            document.getElementById('active-alert-count').innerText = '0 CRITICAL ALERTS';
+            document.getElementById('dispatcher-status').innerText = 'Network running nominal. No manual override required.';
+
+            document.getElementById('btn-resolve-alert').disabled = true;
+            audio.playBeep(1500, 0.1);
+        }
+
+        function setSimSpeed(speed) {
+            simSpeed = speed;
+            ['1x', '2x', '5x'].forEach(s => {
+                const btn = document.getElementById(`btn-speed-${s}`);
+                const isMatch = s === `${speed}x`;
+                btn.classList.toggle('bg-tactical-border', isMatch);
+                btn.classList.toggle('text-white', isMatch);
+                btn.classList.toggle('text-tactical-text', !isMatch);
+            });
+            audio.playBeep(700, 0.03);
+        }
+
+        // ==========================================
+        // 7. INITIALIZATION & MAIN SYSTEM LOOP
+        // ==========================================
+        function updateClock() {
+            const now = new Date();
+            const timeStr = now.toISOString().substr(11, 12);
+            document.getElementById('utc-clock').innerText = timeStr;
+
+            // Update CCTV timestamps
+            ['cctv-time-1', 'cctv-time-2', 'cctv-time-3', 'cctv-time-4'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = timeStr.substr(0, 8);
+            });
+        }
+
+        function mainLoop() {
+            updateSimulation();
+            drawMap();
+            updateInspector();
+
+            // Random Graph Telemetry Tick updates
+            if (Math.random() < 0.2) {
+                graphPower.push(140 + Math.random() * 10);
+                graphLatency.push(3.5 + Math.random() * 2);
+                graphVibration.push(0.1 + Math.random() * 0.08);
+
+                document.getElementById('graph-power-val').innerText = (140 + Math.random() * 5).toFixed(1) + ' MW';
+                document.getElementById('graph-latency-val').innerText = (3.8 + Math.random()).toFixed(1) + ' ms';
+            }
+
+            requestAnimationFrame(mainLoop);
+        }
+
+        window.onload = function() {
+            createFleet();
+            resizeMapCanvas();
+
+            window.addEventListener('resize', () => {
+                resizeMapCanvas();
+                if(graphPower) graphPower.resize();
+                if(graphLatency) graphLatency.resize();
+                if(graphVibration) graphVibration.resize();
+            });
+
+            // Initialize Analytics Graphs
+            graphPower = new SparklineGraph('graph-power', '#ffcc00');
+            graphLatency = new SparklineGraph('graph-latency', '#34c759');
+            graphVibration = new SparklineGraph('graph-vibration', '#00f2fe');
+
+            initCCTVCanvases();
+
+            // Interval Timers
+            setInterval(updateClock, 30);
+            setInterval(updateFleetTable, 500);
+
+            // Initial Logs
+            appendLog('METRO-OPS Central Core Initialized.', 'SYS');
+            appendLog('Connecting to CBTC Signaling Subsystems... Connected (4.2ms)', 'INFO');
+            appendLog('5/5 MRT Lines Telemetry Streams Active.', 'INFO');
+
+            // Start Main Loop
+            mainLoop();
+        };
+    </script>
+</body>
+</html>
